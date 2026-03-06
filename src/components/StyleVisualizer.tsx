@@ -48,12 +48,18 @@ export const StyleVisualizer: React.FC<StyleVisualizerProps> = ({ style }) => {
     backgroundColor: style.primaryColor,
     color: '#ffffff',
     borderRadius: style.borderRadius,
+    boxShadow: `0 4px 0 0 ${style.secondaryColor}`,
+    transform: 'translateY(0)',
+    transition: 'all 0.1s ease-in-out',
   };
 
   const secondaryButtonStyle = {
     backgroundColor: style.secondaryColor,
     color: '#ffffff',
     borderRadius: style.borderRadius,
+    boxShadow: `0 4px 0 0 ${style.primaryColor}`,
+    transform: 'translateY(0)',
+    transition: 'all 0.1s ease-in-out',
   };
 
   const outlineButtonStyle = {
@@ -61,6 +67,9 @@ export const StyleVisualizer: React.FC<StyleVisualizerProps> = ({ style }) => {
     color: style.primaryColor,
     borderRadius: style.borderRadius,
     backgroundColor: 'transparent',
+    boxShadow: `0 4px 0 0 ${style.primaryColor}`,
+    transform: 'translateY(0)',
+    transition: 'all 0.1s ease-in-out',
   };
 
   return (
@@ -153,20 +162,20 @@ export const StyleVisualizer: React.FC<StyleVisualizerProps> = ({ style }) => {
                 <div className="flex flex-wrap gap-4 items-center">
                   <button 
                     style={buttonStyle}
-                    className="px-6 py-3 font-semibold shadow-sm hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
+                    className="px-6 py-3 font-semibold hover:opacity-90 active:translate-y-1 active:shadow-none flex items-center gap-2"
                   >
                     <MousePointer2 size={18} />
                     <span>Primary Action</span>
                   </button>
                   <button 
                     style={secondaryButtonStyle}
-                    className="px-6 py-3 font-semibold shadow-sm hover:opacity-90 active:scale-95 transition-all"
+                    className="px-6 py-3 font-semibold hover:opacity-90 active:translate-y-1 active:shadow-none"
                   >
                     Secondary
                   </button>
                   <button 
                     style={outlineButtonStyle}
-                    className="px-6 py-3 font-semibold hover:bg-slate-50 active:scale-95 transition-all"
+                    className="px-6 py-3 font-semibold hover:bg-slate-50 active:translate-y-1 active:shadow-none"
                   >
                     Outline
                   </button>

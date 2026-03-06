@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FeatureDNA, StyleDNA, AppBlueprint } from "../types";
 import { generateFallbackBlueprint } from "../utils/blueprintUtils";
+import { appBlueprintSchema } from "../schemas/blueprintSchema";
 
 export const auditService = {
   async analyzeCodebase(fileMap: Record<string, string>, oldFeatures?: FeatureDNA[], apiKey?: string): Promise<AppBlueprint> {
@@ -26,7 +27,7 @@ Your Task:
 3. Write a detailed, webpage-ready 'appDescription' that thoroughly explains the app's purpose and features.
 4. Write a 'recentChanges' summary explaining what is new or changed in this version compared to the previous features (if provided). If this is the first import, just summarize the initial state.
 5. Provide 2-3 'featureSuggestions' (new features that would enhance the app) and 2-3 'functionalitySuggestions' (performance, refactoring, or effectiveness improvements). For each, provide a title, description, and a 'codeSnippet' (a prompt or code block I can paste into an AI assistant to implement it).
-6. Analyze the app for buttons and assets. Identify all buttons that are needed or present, and what they are for. Also identify any images or logos.
+6. Analyze the app for buttons and assets. Go through the visual files (React components, HTML, etc.) and find out what all buttons are going to be in there and what they'll look like. This includes all buttons like back buttons, front buttons, undos, tab buttons, or anything that gets highlighted or acts as a button. For each button, add it to the 'assets' array with type 'button', provide a descriptive name, and extract its exact Tailwind classes into the 'className' field so the user can see what it looks like and modify it. Also identify any images or logos and add them as type 'image'.
 
 Return a Single JSON Object with this structure:
 { "appDescription": string, "recentChanges": string, "features": [FeatureDNA], "style": StyleDNA, "currentPhase": string, "featureSuggestions": [AISuggestion], "functionalitySuggestions": [AISuggestion], "assets": [AppAsset] }
@@ -104,8 +105,9 @@ ${JSON.stringify(fileMap, null, 2)}`;
                     name: { type: Type.STRING },
                     url: { type: Type.STRING },
                     className: { type: Type.STRING },
+                    content: { type: Type.STRING },
                   },
-                  required: ["id", "type", "name", "url"],
+                  required: ["id", "type", "name"],
                 },
               },
               style: {
@@ -131,7 +133,11 @@ ${JSON.stringify(fileMap, null, 2)}`;
         throw new Error("No response from Gemini");
       }
 
-      return JSON.parse(text) as AppBlueprint;
+      const parsedJson = JSON.parse(text);
+      // Validate with Zod before returning
+      const validatedBlueprint = appBlueprintSchema.parse(parsedJson);
+      
+      return validatedBlueprint as AppBlueprint;
     } catch (error) {
       console.error("Failed to audit codebase:", error);
       throw error;

@@ -8,6 +8,8 @@ import { AppManifest, AppBlueprint } from '../types';
 import { ArchiveDiffViewer } from './ArchiveDiffViewer';
 import { AppActionCenter } from './AppActionCenter';
 import { GeppyChat } from './GeppyChat';
+import { VersionTimeline } from './dashboard/VersionTimeline';
+import { DNADiffViewer } from './dashboard/DNADiffViewer';
 
 export const AppDetailWorkspace: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +24,8 @@ export const AppDetailWorkspace: React.FC = () => {
   const [pendingBlueprint, setPendingBlueprint] = useState<AppBlueprint | null>(null);
   const [pendingArchive, setPendingArchive] = useState<File | null>(null);
   const [copiedSuggestionId, setCopiedSuggestionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'prompt-dashboard' | 'style' | 'features' | 'history' | 'changes' | 'assets'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'prompt-dashboard' | 'style' | 'features' | 'history' | 'changes' | 'assets' | 'timeline'>('dashboard');
+  const [selectedSnapshot, setSelectedSnapshot] = useState<{ id: string; appId: string; timestamp: number; manifest: AppManifest } | null>(null);
   
   // Asset form state
   const [newAsset, setNewAsset] = useState({ type: 'image', name: '', url: '', className: '' });
@@ -381,11 +384,11 @@ export const AppDetailWorkspace: React.FC = () => {
           {[
             { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
             { id: 'prompt-dashboard', label: 'Prompt Dashboard', icon: <MessageSquare size={20} /> },
+            { id: 'timeline', label: 'DNA Timeline', icon: <History size={20} /> },
             { id: 'changes', label: 'Version Changes', icon: <GitCompare size={20} /> },
             { id: 'style', label: 'Style Manifest', icon: <Palette size={20} /> },
             { id: 'assets', label: 'Assets & Buttons', icon: <ImageIcon size={20} /> },
             { id: 'features', label: 'Features & Preview', icon: <Layers size={20} /> },
-            { id: 'history', label: 'Update History', icon: <History size={20} /> },
           ].map(tab => (
             <button 
               key={tab.id}
@@ -489,6 +492,24 @@ export const AppDetailWorkspace: React.FC = () => {
                   </div>
                 )}
               </>
+            )}
+
+            {activeTab === 'timeline' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1">
+                  <VersionTimeline 
+                    appId={app.id} 
+                    onSelectSnapshot={setSelectedSnapshot} 
+                    selectedSnapshotId={selectedSnapshot?.id || null} 
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <DNADiffViewer 
+                    currentManifest={app} 
+                    snapshotManifest={selectedSnapshot?.manifest || null} 
+                  />
+                </div>
+              </div>
             )}
 
             {activeTab === 'prompt-dashboard' && (
@@ -655,7 +676,7 @@ export const AppDetailWorkspace: React.FC = () => {
                           />
                         </div>
                         <div className="col-span-2">
-                          <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Image URL</label>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Image URL {newAsset.type === 'button' && '(Optional)'}</label>
                           <input 
                             type="text"
                             value={newAsset.url}
@@ -665,21 +686,33 @@ export const AppDetailWorkspace: React.FC = () => {
                           />
                         </div>
                         {newAsset.type === 'button' && (
-                          <div className="col-span-2">
-                            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Tailwind Classes (Optional)</label>
-                            <input 
-                              type="text"
-                              value={newAsset.className}
-                              onChange={(e) => setNewAsset({...newAsset, className: e.target.value})}
-                              placeholder="e.g., w-12 h-12 rounded-full shadow-md"
-                              className="w-full bg-white border-2 border-slate-200 rounded-xl p-2.5 text-slate-700 focus:outline-none focus:border-geppy-blue font-mono text-sm"
-                            />
-                          </div>
+                          <>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Tailwind Classes (Optional)</label>
+                              <input 
+                                type="text"
+                                value={newAsset.className}
+                                onChange={(e) => setNewAsset({...newAsset, className: e.target.value})}
+                                placeholder="e.g., w-12 h-12 rounded-full shadow-md"
+                                className="w-full bg-white border-2 border-slate-200 rounded-xl p-2.5 text-slate-700 focus:outline-none focus:border-geppy-blue font-mono text-sm"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Button Content / Text (Optional)</label>
+                              <input 
+                                type="text"
+                                value={newAsset.content || ''}
+                                onChange={(e) => setNewAsset({...newAsset, content: e.target.value})}
+                                placeholder="e.g., Submit, Undo, or Icon Name"
+                                className="w-full bg-white border-2 border-slate-200 rounded-xl p-2.5 text-slate-700 focus:outline-none focus:border-geppy-blue font-mono text-sm"
+                              />
+                            </div>
+                          </>
                         )}
                       </div>
                       <button 
                         onClick={handleAddAsset}
-                        disabled={!newAsset.name || !newAsset.url}
+                        disabled={!newAsset.name || (newAsset.type !== 'button' && !newAsset.url)}
                         className="flex items-center justify-center gap-2 w-full bg-geppy-blue text-white px-4 py-3 rounded-xl font-bold hover:bg-blue-600 transition-colors disabled:opacity-50"
                       >
                         <Plus size={18} />
@@ -698,10 +731,10 @@ export const AppDetailWorkspace: React.FC = () => {
                                   className={asset.className || 'w-12 h-12 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-500'}
                                   style={asset.url ? { backgroundImage: `url(${asset.url})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : {}}
                                 >
-                                  {!asset.url && 'Btn'}
+                                  {!asset.url && (asset.content || 'Btn')}
                                 </button>
                               ) : (
-                                <img src={asset.url} alt={asset.name} className="max-w-full max-h-full object-contain" />
+                                asset.url ? <img src={asset.url} alt={asset.name} className="max-w-full max-h-full object-contain" /> : <div className="text-xs text-slate-400">No Image</div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -714,13 +747,13 @@ export const AppDetailWorkspace: React.FC = () => {
                               <div className="flex items-center gap-2">
                                 <input 
                                   readOnly
-                                  value={asset.url}
+                                  value={asset.url || asset.className || asset.content || ''}
                                   className="flex-1 bg-slate-50 border border-slate-200 rounded p-1.5 text-xs font-mono text-slate-500 truncate"
                                 />
                                 <button 
-                                  onClick={() => handleCopySuggestion(asset.url, asset.id)}
+                                  onClick={() => handleCopySuggestion(asset.url || asset.className || asset.content || '', asset.id)}
                                   className="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 transition-colors shrink-0"
-                                  title="Copy URL"
+                                  title="Copy"
                                 >
                                   {copiedSuggestionId === asset.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                                 </button>

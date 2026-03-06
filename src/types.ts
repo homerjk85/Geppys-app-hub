@@ -28,8 +28,9 @@ export interface AppAsset {
   id: string;
   type: 'favicon' | 'logo' | 'button' | 'image';
   name: string;
-  url: string;
+  url?: string;
   className?: string; // For button styling preview
+  content?: string; // For button text or icon name
 }
 
 export interface AppBlueprint {

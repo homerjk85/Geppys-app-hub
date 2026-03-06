@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Play, Download, Code, Wand2 } from 'lucide-react';
+import { Play, Download, Code, Wand2, FileCode2 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import JSZip from 'jszip';
@@ -37,11 +37,13 @@ interface AppActionCenterProps {
 
 import { useTailwind } from '../contexts/TailwindContext';
 
+import { DiffViewer } from './workspace/DiffViewer';
+
 export const AppActionCenter: React.FC<AppActionCenterProps> = ({ app, onAnalyze, isAnalyzing, customApiKey }) => {
   const [fileMap, setFileMap] = useState<Record<string, string>>({});
   const [editedFiles, setEditedFiles] = useState<Record<string, string> | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'preview' | 'features'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'features' | 'diff'>('preview');
   const [envVars, setEnvVars] = useState<string>(customApiKey ? `VITE_GEMINI_API_KEY=${customApiKey}` : 'VITE_GEMINI_API_KEY=\n');
   const { injectVariables, scanFileMap } = useTailwind();
 
@@ -175,6 +177,15 @@ export const AppActionCenter: React.FC<AppActionCenterProps> = ({ app, onAnalyze
               <Play size={16} className="inline mr-2" />
               Sandbox Preview
             </button>
+            <button
+              onClick={() => setActiveTab('diff')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                activeTab === 'diff' ? 'bg-white text-geppy-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <FileCode2 size={16} className="inline mr-2" />
+              Code Diff
+            </button>
           </div>
           <button
             onClick={handleDownload}
@@ -222,6 +233,11 @@ export const AppActionCenter: React.FC<AppActionCenterProps> = ({ app, onAnalyze
               </p>
             </div>
           )
+        ) : activeTab === 'diff' ? (
+          <DiffViewer 
+            originalFiles={sandpackFiles} 
+            currentFiles={editedFiles || sandpackFiles} 
+          />
         ) : (
           <div className="p-6 grid grid-cols-1 gap-6 max-h-[600px] overflow-y-auto">
             {app.blueprint?.features.map((feature) => (

@@ -15,17 +15,22 @@ interface GeppyDB extends DBSchema {
     key: string;
     value: any;
   };
+  snapshots: {
+    key: string;
+    value: { id: string; appId: string; timestamp: number; manifest: AppManifest };
+    indexes: { 'by-appId': string };
+  };
 }
 
 const DB_NAME = 'geppy-hub-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version for new store
 
 let dbPromise: Promise<IDBPDatabase<GeppyDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
     dbPromise = openDB<GeppyDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, newVersion, transaction) {
         if (!db.objectStoreNames.contains('apps')) {
           const appStore = db.createObjectStore('apps', { keyPath: 'id' });
           appStore.createIndex('by-updated', 'updatedAt');
@@ -35,6 +40,10 @@ export const initDB = () => {
         }
         if (!db.objectStoreNames.contains('styleManifests')) {
           db.createObjectStore('styleManifests', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('snapshots')) {
+          const snapshotStore = db.createObjectStore('snapshots', { keyPath: 'id' });
+          snapshotStore.createIndex('by-appId', 'appId');
         }
       },
     });
@@ -55,12 +64,39 @@ export const storageService = {
 
   async saveApp(app: AppManifest): Promise<void> {
     const db = await initDB();
+    
+    // Check if the app already exists to create a snapshot
+    const existingApp = await db.get('apps', app.id);
+    if (existingApp) {
+      const snapshotId = `${app.id}_${Date.now()}`;
+      await db.put('snapshots', {
+        id: snapshotId,
+        appId: app.id,
+        timestamp: Date.now(),
+        manifest: existingApp
+      });
+    }
+
     await db.put('apps', app);
+  },
+
+  async getSnapshots(appId: string): Promise<{ id: string; appId: string; timestamp: number; manifest: AppManifest }[]> {
+    const db = await initDB();
+    const snapshots = await db.getAllFromIndex('snapshots', 'by-appId', appId);
+    return snapshots.sort((a, b) => b.timestamp - a.timestamp); // Sort descending
   },
 
   async deleteApp(id: string): Promise<void> {
     const db = await initDB();
     await db.delete('apps', id);
+    
+    // Delete associated snapshots
+    const snapshots = await db.getAllFromIndex('snapshots', 'by-appId', id);
+    const tx = db.transaction('snapshots', 'readwrite');
+    for (const snapshot of snapshots) {
+      await tx.store.delete(snapshot.id);
+    }
+    await tx.done;
   },
 
   async getStorageUsage(): Promise<number> {
@@ -69,8 +105,9 @@ export const storageService = {
     const apps = await db.getAll('apps');
     const archives = await db.getAll('archives');
     const styles = await db.getAll('styleManifests');
+    const snapshots = await db.getAll('snapshots');
     
-    const size = new Blob([JSON.stringify({ apps, archives, styles })]).size;
+    const size = new Blob([JSON.stringify({ apps, archives, styles, snapshots })]).size;
     return size;
   },
 
