@@ -28,7 +28,7 @@ export const AppDetailWorkspace: React.FC = () => {
   const [selectedSnapshot, setSelectedSnapshot] = useState<{ id: string; appId: string; timestamp: number; manifest: AppManifest } | null>(null);
   
   // Asset form state
-  const [newAsset, setNewAsset] = useState({ type: 'image', name: '', url: '', className: '' });
+  const [newAsset, setNewAsset] = useState({ type: 'image', name: '', url: '', className: '', content: '' });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -190,7 +190,12 @@ export const AppDetailWorkspace: React.FC = () => {
         blueprint: {
           ...pendingBlueprint,
           previousFeatures: app.blueprint?.features || [],
-          assets: app.blueprint?.assets || []
+          assets: [
+            ...(app.blueprint?.assets || []),
+            ...(pendingBlueprint.assets || []).filter(
+              newAsset => !(app.blueprint?.assets || []).some(oldAsset => oldAsset.name === newAsset.name)
+            )
+          ]
         },
         changelog: [
           ...(app.changelog || []),
@@ -236,7 +241,8 @@ export const AppDetailWorkspace: React.FC = () => {
   };
 
   const handleAddAsset = () => {
-    if (!app || !app.blueprint || !newAsset.name || !newAsset.url) return;
+    if (!app || !app.blueprint || !newAsset.name) return;
+    if (newAsset.type !== 'button' && !newAsset.url) return;
     
     const asset = {
       ...newAsset,
@@ -253,7 +259,7 @@ export const AppDetailWorkspace: React.FC = () => {
     };
     
     setApp(updatedApp);
-    setNewAsset({ type: 'image', name: '', url: '', className: '' });
+    setNewAsset({ type: 'image', name: '', url: '', className: '', content: '' });
     // Auto-save when adding an asset
     storageService.saveApp(updatedApp);
   };

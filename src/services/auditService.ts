@@ -27,7 +27,7 @@ Your Task:
 3. Write a detailed, webpage-ready 'appDescription' that thoroughly explains the app's purpose and features.
 4. Write a 'recentChanges' summary explaining what is new or changed in this version compared to the previous features (if provided). If this is the first import, just summarize the initial state.
 5. Provide 2-3 'featureSuggestions' (new features that would enhance the app) and 2-3 'functionalitySuggestions' (performance, refactoring, or effectiveness improvements). For each, provide a title, description, and a 'codeSnippet' (a prompt or code block I can paste into an AI assistant to implement it).
-6. Analyze the app for buttons and assets. Go through the visual files (React components, HTML, etc.) and find out what all buttons are going to be in there and what they'll look like. This includes all buttons like back buttons, front buttons, undos, tab buttons, or anything that gets highlighted or acts as a button. For each button, add it to the 'assets' array with type 'button', provide a descriptive name, and extract its exact Tailwind classes into the 'className' field so the user can see what it looks like and modify it. Also identify any images or logos and add them as type 'image'.
+6. Analyze the app for buttons and assets. Go through the visual files (React components, HTML, etc.) and find out what all buttons are going to be in there and what they'll look like. This includes all buttons like back buttons, front buttons, undos, tab buttons, or anything that gets highlighted or acts as a button. For each button, add it to the 'assets' array with type 'button', provide a descriptive name, extract its exact Tailwind classes into the 'className' field, and extract its text or icon into the 'content' field. Also identify any images or logos and add them as type 'image'. YOU MUST RETURN AT LEAST ONE ASSET IF THERE ARE ANY BUTTONS OR IMAGES.
 
 Return a Single JSON Object with this structure:
 { "appDescription": string, "recentChanges": string, "features": [FeatureDNA], "style": StyleDNA, "currentPhase": string, "featureSuggestions": [AISuggestion], "functionalitySuggestions": [AISuggestion], "assets": [AppAsset] }
@@ -123,7 +123,7 @@ ${JSON.stringify(fileMap, null, 2)}`;
               },
               currentPhase: { type: Type.STRING },
             },
-            required: ["appDescription", "recentChanges", "features", "style", "currentPhase"],
+            required: ["appDescription", "recentChanges", "features", "style", "currentPhase", "assets"],
           },
         },
       });

@@ -37,6 +37,7 @@ export const generateFallbackBlueprint = (fileMap: Record<string, string>, error
         },
         currentPhase: "Imported",
         featureSuggestions: [],
-        functionalitySuggestions: []
+        functionalitySuggestions: [],
+        assets: []
     };
 };
