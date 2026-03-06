@@ -16,6 +16,7 @@ export const AppDetailWorkspace: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [hasArchive, setHasArchive] = useState(false);
   const [isUpdatingArchive, setIsUpdatingArchive] = useState(false);
+  const [isUpdatingGithub, setIsUpdatingGithub] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   const [pendingBlueprint, setPendingBlueprint] = useState<AppBlueprint | null>(null);
@@ -59,6 +60,67 @@ export const AppDetailWorkspace: React.FC = () => {
     navigate('/');
   };
 
+  const handleUpdateFromGithub = async () => {
+    if (!app || !app.githubUrl) return;
+    
+    setIsUpdatingGithub(true);
+    try {
+      // 1. Download ZIP from GitHub Proxy
+      const response = await fetch(`/api/github/download?url=${encodeURIComponent(app.githubUrl)}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `GitHub download failed: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const filename = app.githubUrl.split('/').pop()?.replace('.git', '') + '.zip' || 'github-update.zip';
+      const file = new File([blob], filename, { type: 'application/zip' });
+
+      // 2. Process the ZIP
+      const fileMap = await processZipUpload(file);
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const newBlueprint = await auditService.analyzeCodebase(fileMap, app.blueprint?.features, apiKey);
+      
+      if (!app.blueprint) {
+        // If there was no previous blueprint, just save it directly
+        await storageService.saveArchive(app.id, file);
+        const newVersion = incrementVersion(app.version);
+        const updatedApp = {
+          ...app,
+          version: newVersion,
+          description: newBlueprint.appDescription || app.description,
+          updatedAt: Date.now(),
+          blueprint: newBlueprint,
+          changelog: [
+            ...(app.changelog || []),
+            {
+              version: newVersion,
+              timestamp: Date.now(),
+              changes: newBlueprint.recentChanges || 'Updated from GitHub.',
+              originalFilename: file.name
+            }
+          ]
+        };
+        await storageService.saveApp(updatedApp);
+        setApp(updatedApp);
+        setHasArchive(true);
+        alert('App updated from GitHub successfully! Version bumped.');
+      } else {
+        // We have an old blueprint, show diff
+        setPendingBlueprint(newBlueprint);
+        setPendingArchive(file);
+        setActiveTab('changes');
+      }
+
+    } catch (error: any) {
+      console.error('Failed to update from GitHub:', error);
+      alert(`Failed to update from GitHub: ${error.message}`);
+    } finally {
+      setIsUpdatingGithub(false);
+    }
+  };
+
   const handleUpdateArchive = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !app) return;
@@ -66,7 +128,8 @@ export const AppDetailWorkspace: React.FC = () => {
     setIsUpdatingArchive(true);
     try {
       const fileMap = await processZipUpload(file);
-      const newBlueprint = await auditService.analyzeCodebase(fileMap, app.blueprint?.features);
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const newBlueprint = await auditService.analyzeCodebase(fileMap, app.blueprint?.features, apiKey);
       
       if (!app.blueprint) {
         // If there was no previous blueprint, just save it directly
@@ -250,6 +313,21 @@ export const AppDetailWorkspace: React.FC = () => {
             ref={fileInputRef}
             onChange={handleUpdateArchive}
           />
+          
+          {app.githubUrl && (
+            <button 
+              onClick={handleUpdateFromGithub}
+              disabled={isUpdatingGithub || !!pendingBlueprint}
+              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full font-bold border-4 border-slate-900 border-b-[8px] active:border-b-4 active:translate-y-1 transition-all disabled:opacity-70 disabled:active:border-b-[8px] disabled:active:translate-y-0"
+              title={`Update from ${app.githubUrl}`}
+            >
+              <div className="bg-white text-slate-900 rounded-full p-0.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+              </div>
+              <span>{isUpdatingGithub ? 'Pulling...' : 'Update from GitHub'}</span>
+            </button>
+          )}
+
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUpdatingArchive || !!pendingBlueprint}

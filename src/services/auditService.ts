@@ -1,10 +1,19 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { FeatureDNA, StyleDNA, AppBlueprint } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { generateFallbackBlueprint } from "../utils/blueprintUtils";
 
 export const auditService = {
-  async analyzeCodebase(fileMap: Record<string, string>, oldFeatures?: FeatureDNA[]): Promise<AppBlueprint> {
+  async analyzeCodebase(fileMap: Record<string, string>, oldFeatures?: FeatureDNA[], apiKey?: string): Promise<AppBlueprint> {
+    // Prioritize passed key, then env vars
+    const key = apiKey || process.env.GEMINI_API_KEY || process.env.API_KEY;
+    
+    if (!key) {
+      console.warn("API Key is missing for auditService. Using fallback blueprint.");
+      return generateFallbackBlueprint(fileMap, "API Key is missing. Please provide a valid API Key.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: key });
+
     const oldFeaturesContext = oldFeatures && oldFeatures.length > 0
       ? `\nPrevious Features:\n${JSON.stringify(oldFeatures, null, 2)}\n\nIf a feature from the Previous Features is no longer present in the Codebase Map, mark it as 'graveyard'. For graveyard features, you MUST provide a 'removalReason' (one of: 'replaced', 'missing', 'user_requested', 'ai_assumed') and 'removalNotes' explaining why it was removed.`
       : `\nIf a feature is present in the code but seems deprecated or unused, mark it as 'graveyard'. For graveyard features, you MUST provide a 'removalReason' (one of: 'replaced', 'missing', 'user_requested', 'ai_assumed') and 'removalNotes' explaining why it was removed.`;
@@ -13,7 +22,7 @@ export const auditService = {
 
 Your Task:
 1. Identify every unique functional feature and extract its 'DNA' (the core logic).
-2. Map out the StyleManifest based on the CSS/Tailwind classes found. Include primary and secondary colors (if no secondary color is obvious, use a complementary color or default to a dark blue/orange theme).
+2. Map out the StyleManifest based on the CSS/Tailwind classes found. Include primary and secondary colors. IMPORTANT: Analyze 'tailwind.config.js' and global CSS files to extract custom color palettes, CSS variables (e.g. --primary), and theme extensions. Include these details in the 'tailwindConfigSnippet'.
 3. Write a detailed, webpage-ready 'appDescription' that thoroughly explains the app's purpose and features.
 4. Write a 'recentChanges' summary explaining what is new or changed in this version compared to the previous features (if provided). If this is the first import, just summarize the initial state.
 5. Provide 2-3 'featureSuggestions' (new features that would enhance the app) and 2-3 'functionalitySuggestions' (performance, refactoring, or effectiveness improvements). For each, provide a title, description, and a 'codeSnippet' (a prompt or code block I can paste into an AI assistant to implement it).

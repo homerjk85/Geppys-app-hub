@@ -123,8 +123,8 @@ export const FleetDashboard: React.FC = () => {
                 {app.description}
               </p>
               
-              <div className="flex items-center justify-between pt-6 border-t-2 border-slate-100 mt-auto">
-                <div className="font-mono text-xs text-slate-400 flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between pt-6 border-t-2 border-slate-100 mt-auto gap-4">
+                <div className="font-mono text-xs text-slate-400 flex flex-wrap items-center gap-2">
                   <span>v{app.version}</span>
                   <span>•</span>
                   <span>{new Date(app.updatedAt).toLocaleDateString()}</span>

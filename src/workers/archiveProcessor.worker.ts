@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { AppBlueprint, FeatureDNA, AISuggestion, StyleDNA } from "../types";
+import { generateFallbackBlueprint } from "../utils/blueprintUtils";
 
 // Dynamic imports for GenAI to avoid top-level failures
 let GoogleGenAI: any;
@@ -13,7 +14,12 @@ export type WorkerMessage =
   | { type: 'ERROR'; error: string };
 
 // --- Logic from extractionService.ts ---
-const IGNORED_DIRECTORIES = ['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', '.vscode', '.idea', '.DS_Store', '__MACOSX'];
+const IGNORED_DIRECTORIES = [
+  'node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', 
+  '.vscode', '.idea', '.DS_Store', '__MACOSX', 
+  'vendor', 'tmp', 'temp', 'logs', 'bin', 'obj', 'jspm_packages', 'bower_components'
+];
+
 const ALLOWED_EXTENSIONS = [
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', 
   '.css', '.scss', '.sass', '.less', 
@@ -24,9 +30,16 @@ const ALLOWED_EXTENSIONS = [
   '.xml', '.svg', 
   '.vue', '.svelte', '.astro',
   '.sql', '.graphql', '.prisma',
-  '.py', '.rb', '.php', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.sh', '.bat'
+  '.py', '.rb', '.php', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.sh', '.bat',
+  '.toml', '.ini', '.conf'
 ];
-const ALLOWED_FILENAMES = ['Dockerfile', 'LICENSE', 'README', 'Makefile', '.env', '.env.example', '.gitignore', '.dockerignore', '.editorconfig'];
+
+const ALLOWED_FILENAMES = [
+  'Dockerfile', 'LICENSE', 'README', 'Makefile', 
+  '.env', '.env.example', '.gitignore', '.dockerignore', '.editorconfig',
+  'Procfile', 'netlify.toml', 'vercel.json', 'now.json'
+];
+
 const MAX_FILE_SIZE = 1000000; // 1MB limit per file for AI analysis
 
 const processZipUpload = async (file: ArrayBuffer | Blob): Promise<Record<string, string>> => {
@@ -64,7 +77,10 @@ const processZipUpload = async (file: ArrayBuffer | Blob): Promise<Record<string
       const text = await fileEntry.async('string');
       // Only include files that aren't massive to keep the AI prompt manageable
       if (text.length < MAX_FILE_SIZE) {
-        rawFileMap[path] = text;
+        // Skip minified files
+        if (!filename.includes('.min.') && !filename.includes('-min.')) {
+            rawFileMap[path] = text;
+        }
       }
     }
     
@@ -106,46 +122,40 @@ const processZipUpload = async (file: ArrayBuffer | Blob): Promise<Record<string
 
 // --- Logic from auditService.ts ---
 
-// Fallback function to generate a blueprint without AI
-const generateFallbackBlueprint = (fileMap: Record<string, string>, errorMsg: string): AppBlueprint => {
-    const fileCount = Object.keys(fileMap).length;
-    const fileNames = Object.keys(fileMap).slice(0, 5).join(", ");
-    const hasPackageJson = !!fileMap['package.json'];
-    let appName = "Imported App";
-    let appDesc = `Contains ${fileCount} source files. Analysis could not be completed due to missing/invalid API key.`;
+const calculateFileRelevance = (path: string, content: string): number => {
+    let score = 0;
+    const filename = path.split('/').pop() || '';
+    const lowerPath = path.toLowerCase();
 
-    if (hasPackageJson) {
-        try {
-            const pkg = JSON.parse(fileMap['package.json']);
-            if (pkg.name) appName = pkg.name;
-            if (pkg.description) appDesc = pkg.description;
-        } catch (e) { /* ignore */ }
-    }
+    // 1. Critical Config Files (Highest Priority)
+    if (filename === 'package.json') score += 100;
+    if (filename === 'tsconfig.json') score += 90;
+    if (filename === 'README.md') score += 85;
+    if (filename === '.env.example') score += 80;
+    if (filename === 'vite.config.ts' || filename === 'next.config.js') score += 80;
 
-    return {
-        appDescription: appDesc,
-        recentChanges: `Imported ${fileCount} files.`,
-        features: [
-            {
-                id: "files-manifest",
-                name: "Source Files",
-                behavior: "Raw source code imported from zip archive.",
-                codeSnippet: "// Files present: " + fileNames + (fileCount > 5 ? "..." : ""),
-                status: "active",
-                dependencies: []
-            }
-        ],
-        style: {
-            primaryColor: "#64748b", // Slate-500
-            secondaryColor: "#94a3b8", // Slate-400
-            borderRadius: "0.5rem",
-            componentVibe: "Neutral",
-            tailwindConfigSnippet: "// Default fallback style"
-        },
-        currentPhase: "Imported",
-        featureSuggestions: [],
-        functionalitySuggestions: []
-    };
+    // 2. Entry Points
+    if (lowerPath.includes('src/main.') || lowerPath.includes('src/index.') || lowerPath.includes('src/app.')) score += 70;
+    if (lowerPath.includes('pages/_app') || lowerPath.includes('pages/index')) score += 70;
+
+    // 3. Source Code
+    if (lowerPath.startsWith('src/')) score += 50;
+    if (lowerPath.includes('components/')) score += 40;
+    if (lowerPath.includes('hooks/')) score += 40;
+    if (lowerPath.includes('utils/') || lowerPath.includes('lib/')) score += 30;
+    if (lowerPath.includes('types') || lowerPath.includes('interfaces')) score += 35;
+
+    // 4. Styles
+    if (lowerPath.endsWith('.css') || lowerPath.endsWith('.scss')) score += 20;
+    if (lowerPath.includes('tailwind')) score += 25;
+
+    // 5. Penalties for less relevant files
+    if (lowerPath.includes('test') || lowerPath.includes('spec')) score -= 50;
+    if (lowerPath.includes('stories')) score -= 30; // Storybook files
+    if (lowerPath.includes('assets/') || lowerPath.includes('public/')) score -= 20;
+    if (content.length > 20000) score -= 10; // Penalty for huge files
+
+    return score;
 };
 
 const analyzeCodebase = async (fileMap: Record<string, string>, apiKey: string, oldFeatures?: FeatureDNA[]): Promise<AppBlueprint> => {
@@ -182,11 +192,32 @@ const analyzeCodebase = async (fileMap: Record<string, string>, apiKey: string, 
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 1. Create a compact representation of the codebase
-    const codebaseSummary = Object.entries(fileMap)
-      .map(([path, content]) => `FILE: ${path}\nCONTENT:\n${content.substring(0, 50000)}`) // Increased per-file limit to 50k chars
-      .join("\n\n---\n\n")
-      .substring(0, 3000000); // Increased total prompt limit to ~3M chars (fits within Gemini 1M token window)
+    // 1. Sort files by relevance
+    const sortedFiles = Object.entries(fileMap)
+        .map(([path, content]) => ({ path, content, score: calculateFileRelevance(path, content) }))
+        .sort((a, b) => b.score - a.score);
+
+    // 2. Create a compact representation of the codebase
+    // We'll take the top files until we hit a character limit
+    const MAX_PROMPT_CHARS = 3000000;
+    let currentChars = 0;
+    const includedFiles: string[] = [];
+
+    const codebaseSummary = sortedFiles
+      .filter(f => {
+          if (currentChars > MAX_PROMPT_CHARS) return false;
+          // Truncate individual files if they are too large, but keep more of the important ones
+          const maxFileLength = f.score > 50 ? 50000 : 10000;
+          const content = f.content.substring(0, maxFileLength);
+          
+          currentChars += content.length + f.path.length + 20; // + overhead
+          includedFiles.push(f.path);
+          return true;
+      })
+      .map(f => `FILE: ${f.path}\nCONTENT:\n${f.content.substring(0, f.score > 50 ? 50000 : 10000)}`)
+      .join("\n\n---\n\n");
+
+    console.log(`AI Analysis: Included ${includedFiles.length} files out of ${sortedFiles.length}. Top files: ${includedFiles.slice(0, 5).join(', ')}`);
 
     const oldFeaturesContext = oldFeatures && oldFeatures.length > 0
       ? `\nPrevious Features:\n${JSON.stringify(oldFeatures, null, 2)}\n\nIf a feature from the Previous Features is no longer present in the Codebase Map, mark it as 'graveyard'. For graveyard features, you MUST provide a 'removalReason' (one of: 'replaced', 'missing', 'user_requested', 'ai_assumed') and 'removalNotes' explaining why it was removed.`

@@ -59,6 +59,7 @@ export interface AppManifest {
   updatedAt: number;
   version: string;
   status: 'draft' | 'published' | 'archived';
+  githubUrl?: string;
   blueprint?: AppBlueprint;
   changelog?: ChangelogEntry[];
 }
